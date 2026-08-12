@@ -46,9 +46,9 @@ class GatewaySettings:
 
 def load_settings() -> GatewaySettings:
     models = [
-        _model(1, "poolside/laguna-xs-2.1:free", "Poolside Laguna XS 2.1 (free)"),
-        _model(2, "openai/gpt-oss-20b:free", "OpenAI GPT-OSS 20B (free)"),
-        _model(3, "google/gemma-4-31b-it:free", "Google Gemma 4 31B (free)"),
+        _model(1, "poolside/laguna-xs-2.1:free", "Laguna XS 2.1"),
+        _model(2, "openai/gpt-oss-20b:free", "GPT-OSS 20B"),
+        _model(3, "google/gemma-4-31b-it:free", "Gemma 4 31B"),
     ]
     return GatewaySettings(
         openrouter_api_key=os.getenv("OPENROUTER_API_KEY", ""),

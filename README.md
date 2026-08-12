@@ -220,9 +220,9 @@ the active model for the *current* session:
 ```
 > /model
 Available models:
-  poolside/laguna-xs-2.1:free   Poolside Laguna XS 2.1 (free)   [active]
-  openai/gpt-oss-20b:free       OpenAI GPT-OSS 20B (free)
-  google/gemma-4-31b-it:free    Google Gemma 4 31B (free)
+  poolside/laguna-xs-2.1:free   Laguna XS 2.1   [active]
+  openai/gpt-oss-20b:free       GPT-OSS 20B
+  google/gemma-4-31b-it:free    Gemma 4 31B
 
 > /model openai/gpt-oss-20b:free
 OK Model switched to openai/gpt-oss-20b:free
