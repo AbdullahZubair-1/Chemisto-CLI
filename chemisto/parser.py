@@ -8,21 +8,6 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-COMMAND_NAMES = {
-    "help",
-    "file",
-    "ls",
-    "tree",
-    "run",
-    "model",
-    "history",
-    "stats",
-    "new",
-    "clear",
-    "exit",
-    "quit",
-}
-
 
 @dataclass
 class ParsedInput:
@@ -49,4 +34,9 @@ def parse_input(raw: str) -> ParsedInput:
 
 
 def is_known_command(command: str) -> bool:
-    return command in COMMAND_NAMES
+    # Imported lazily so this module stays free of I/O-heavy dependencies
+    # (rich, httpx, ...) - commands.COMMAND_HANDLERS is the single source of
+    # truth for which command names actually exist.
+    from chemisto.commands import COMMAND_HANDLERS
+
+    return command in COMMAND_HANDLERS

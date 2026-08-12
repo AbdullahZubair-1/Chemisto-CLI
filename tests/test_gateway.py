@@ -149,15 +149,17 @@ def test_stream_message_success_yields_content_then_done():
 
 
 @respx.mock
-def test_stream_message_propagates_in_band_error_event():
+def test_stream_message_raises_on_in_band_error_event():
     body = '{"type": "error", "status_code": 429, "detail": "Too many requests"}\n'
     respx.post(f"{BASE_URL}/sessions/abc/messages/stream").mock(
         return_value=httpx.Response(200, content=body, headers={"content-type": "application/x-ndjson"})
     )
     client = GatewayClient(make_settings())
-    events = list(client.stream_message("abc", "hi"))
 
-    assert events[0] == {"type": "error", "status_code": 429, "detail": "Too many requests"}
+    with pytest.raises(GatewayHTTPError) as exc_info:
+        list(client.stream_message("abc", "hi"))
+    assert exc_info.value.status_code == 429
+    assert "Too many requests" in str(exc_info.value)
 
 
 @respx.mock

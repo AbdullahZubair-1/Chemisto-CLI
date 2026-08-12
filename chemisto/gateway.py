@@ -16,6 +16,7 @@ import httpx
 from chemisto.config import ChemistoSettings
 from chemisto.exceptions import (
     GatewayConnectionError,
+    GatewayError,
     GatewayHTTPError,
     GatewayResponseError,
     GatewayTimeoutError,
@@ -67,16 +68,8 @@ class GatewayClient:
             response = httpx.request(
                 method, url, json=json, timeout=self._settings.http_timeout_seconds
             )
-        except httpx.ConnectError as exc:
-            raise GatewayConnectionError(
-                "Unable to connect to the Chemisto gateway. Is it running?"
-            ) from exc
-        except httpx.TimeoutException as exc:
-            raise GatewayTimeoutError(
-                "The Chemisto gateway did not respond in time."
-            ) from exc
-        except httpx.RequestError as exc:
-            raise GatewayConnectionError(f"Gateway request failed: {exc}") from exc
+        except httpx.HTTPError as exc:
+            raise _translate_httpx_error(exc) from exc
 
         if response.status_code >= 400:
             detail = _extract_detail(response)
@@ -120,8 +113,10 @@ class GatewayClient:
         self, chat_id: str, content: str, model: str | None = None
     ) -> Iterator[dict]:
         """Stream a reply as newline-delimited JSON events: {"type": "content", "text": ...},
-        then a single {"type": "done", ...} or {"type": "error", ...} terminating the stream.
-        See gateway/main.py's module docstring for the exact event contract."""
+        then a single {"type": "done", ...} event terminating the stream. A mid-stream
+        provider error (in-band {"type": "error", ...}) is raised here as GatewayHTTPError,
+        same as every other error path, so callers only ever need to catch exceptions - see
+        gateway/main.py's module docstring for the exact event contract."""
         url = f"{self._settings.gateway_url}/sessions/{chat_id}/messages/stream"
         payload: dict = {"content": content}
         if model:
@@ -139,19 +134,16 @@ class GatewayClient:
                     if not line:
                         continue
                     try:
-                        yield json.loads(line)
+                        event = json.loads(line)
                     except json.JSONDecodeError:
                         continue
-        except httpx.ConnectError as exc:
-            raise GatewayConnectionError(
-                "Unable to connect to the Chemisto gateway. Is it running?"
-            ) from exc
-        except httpx.TimeoutException as exc:
-            raise GatewayTimeoutError(
-                "The Chemisto gateway did not respond in time."
-            ) from exc
-        except httpx.RequestError as exc:
-            raise GatewayConnectionError(f"Gateway request failed: {exc}") from exc
+                    if event.get("type") == "error":
+                        raise GatewayHTTPError(
+                            event.get("status_code", 502), event.get("detail", "Unknown error from gateway.")
+                        )
+                    yield event
+        except httpx.HTTPError as exc:
+            raise _translate_httpx_error(exc) from exc
 
     def get_history(self, chat_id: str) -> tuple[str, list[HistoryEntry]]:
         data = self._request("GET", f"/sessions/{chat_id}/history")
@@ -161,6 +153,14 @@ class GatewayClient:
     def clear_session(self, chat_id: str) -> bool:
         data = self._request("DELETE", f"/sessions/{chat_id}/messages")
         return bool(data.get("cleared", False))
+
+
+def _translate_httpx_error(exc: httpx.HTTPError) -> GatewayError:
+    if isinstance(exc, httpx.ConnectError):
+        return GatewayConnectionError("Unable to connect to the Chemisto gateway. Is it running?")
+    if isinstance(exc, httpx.TimeoutException):
+        return GatewayTimeoutError("The Chemisto gateway did not respond in time.")
+    return GatewayConnectionError(f"Gateway request failed: {exc}")
 
 
 def _extract_detail(response: httpx.Response) -> str:

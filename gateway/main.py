@@ -145,15 +145,14 @@ def _prepare_turn(chat_id: str, payload: SendMessageRequest) -> tuple[ChatSessio
     """Validate/apply an optional model switch, append the user's message,
     and return the resulting session plus the message list to send upstream.
     Shared by both the blocking and streaming /messages endpoints."""
-    _require_session(chat_id)
+    session = _require_session(chat_id)
 
-    if payload.model is not None and settings.model_by_id(payload.model) is None:
-        raise HTTPException(status_code=400, detail=f"Unknown model id: {payload.model}")
     if payload.model is not None:
+        if settings.model_by_id(payload.model) is None:
+            raise HTTPException(status_code=400, detail=f"Unknown model id: {payload.model}")
         store.set_model(chat_id, payload.model)
 
     store.append(chat_id, "user", payload.content)
-    session = _require_session(chat_id)
     api_messages = [{"role": m.role, "content": m.content} for m in session.messages]
     return session, api_messages
 

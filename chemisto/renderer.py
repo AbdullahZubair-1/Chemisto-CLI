@@ -44,8 +44,8 @@ def print_banner(model: str, chat_id: str) -> None:
     console.print(Panel(body, title="Chemisto", border_style="cyan", expand=False))
 
 
-def print_assistant_reply(text: str) -> None:
-    console.print(Panel(Markdown(text), title="Chemisto", border_style="green", expand=True))
+def _reply_panel(body) -> Panel:
+    return Panel(body, title="Chemisto", border_style="green", expand=True)
 
 
 @contextmanager
@@ -60,17 +60,13 @@ def stream_assistant_reply():
     """
     accumulated = {"text": ""}
 
-    def render() -> Panel:
-        body = Markdown(accumulated["text"]) if accumulated["text"] else Text("")
-        return Panel(body, title="Chemisto", border_style="green", expand=True)
-
-    with Live(render(), console=console, refresh_per_second=12) as live:
+    with Live(_reply_panel(Text("")), console=console, refresh_per_second=12) as live:
         def append(chunk: str) -> None:
             accumulated["text"] += chunk
-            live.update(Panel(Text(accumulated["text"]), title="Chemisto", border_style="green", expand=True))
+            live.update(_reply_panel(Text(accumulated["text"])))
 
         def finish() -> None:
-            live.update(render())
+            live.update(_reply_panel(Markdown(accumulated["text"]) if accumulated["text"] else Text("")))
 
         yield append, finish
 
@@ -81,16 +77,6 @@ def print_success(message: str) -> None:
 
 def print_error(message: str) -> None:
     console.print(f"[bold red]ERROR[/bold red] {message}")
-
-
-def print_info(message: str) -> None:
-    console.print(f"[cyan]{message}[/cyan]")
-
-
-@contextmanager
-def thinking_status():
-    with console.status("[bold cyan]Thinking...[/bold cyan]", spinner="dots") as status:
-        yield status
 
 
 def print_help(entries: list[tuple[str, str]]) -> None:

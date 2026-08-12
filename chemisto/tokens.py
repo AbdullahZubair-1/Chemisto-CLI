@@ -9,10 +9,13 @@ from __future__ import annotations
 
 import tiktoken
 
-_ENCODING = tiktoken.get_encoding("cl100k_base")
+_encoding = None
 
 
 def estimate_tokens(text: str) -> int:
     if not text:
         return 0
-    return len(_ENCODING.encode(text))
+    global _encoding
+    if _encoding is None:
+        _encoding = tiktoken.get_encoding("cl100k_base")
+    return len(_encoding.encode(text))

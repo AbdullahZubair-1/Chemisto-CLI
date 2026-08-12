@@ -148,7 +148,3 @@ class ContextManager:
             return user_request
 
         return "\n\n".join(blocks) + f"\n\nUSER REQUEST:\n{user_request}"
-
-
-def detect_language(path: str) -> str:
-    return _LANGUAGE_BY_EXTENSION.get(Path(path).suffix.lower(), "text")

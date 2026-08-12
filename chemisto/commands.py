@@ -5,6 +5,12 @@ returns True to keep the REPL running or False to exit. Handlers only
 touch local resources (filesystem, subprocess, gateway session calls) -
 none of them send a message to the LLM except indirectly via /run's or
 /file's *next* plain-text turn, which the REPL drives separately.
+
+Handlers let ChemistoError propagate rather than catching it themselves -
+dispatch() catches it once, centrally, and renders it the same way for
+every command. Only exceptions outside that hierarchy (e.g. the builtin
+FileNotFoundError/NotADirectoryError from directory.py) are still caught
+locally, since dispatch's single catch can't cover those.
 """
 from __future__ import annotations
 
@@ -13,11 +19,7 @@ from dataclasses import dataclass, field
 from chemisto.config import ChemistoSettings
 from chemisto.context import ContextManager
 from chemisto.directory import build_tree_lines, list_directory
-from chemisto.exceptions import (
-    ChemistoError,
-    CommandExecutionError,
-    FileContextError,
-)
+from chemisto.exceptions import ChemistoError
 from chemisto.executor import run_command
 from chemisto.gateway import GatewayClient
 from chemisto.renderer import (
@@ -59,8 +61,6 @@ class AppState:
     session: LocalSession
     context: ContextManager = field(default_factory=ContextManager)
     turn_count: int = 0
-    message_count: int = 0
-    available_models: list = field(default_factory=list)
 
 
 def handle_help(state: AppState, argument: str) -> bool:
@@ -72,11 +72,7 @@ def handle_file(state: AppState, argument: str) -> bool:
     if not argument:
         print_error("Usage: /file <path>")
         return True
-    try:
-        state.context.add_file(argument, state.settings)
-    except FileContextError as exc:
-        print_error(str(exc))
-        return True
+    state.context.add_file(argument, state.settings)
     print_success(f"Added file context: {argument}")
     return True
 
@@ -107,16 +103,11 @@ def handle_run(state: AppState, argument: str) -> bool:
     if not argument:
         print_error("Usage: /run <command>")
         return True
-    try:
-        result = run_command(
-            argument,
-            timeout_seconds=state.settings.command_timeout_seconds,
-            max_output_chars=state.settings.max_command_output_chars,
-        )
-    except CommandExecutionError as exc:
-        print_error(str(exc))
-        return True
-
+    result = run_command(
+        argument,
+        timeout_seconds=state.settings.command_timeout_seconds,
+        max_output_chars=state.settings.max_command_output_chars,
+    )
     context = state.context.add_command_result(
         command=result.command,
         exit_code=result.exit_code,
@@ -133,12 +124,7 @@ def handle_run(state: AppState, argument: str) -> bool:
 
 
 def handle_model(state: AppState, argument: str) -> bool:
-    try:
-        models, _default = state.client.list_models()
-    except ChemistoError as exc:
-        print_error(str(exc))
-        return True
-    state.available_models = models
+    models, _default = state.client.list_models()
 
     if not argument:
         print_model_list(models, state.session.model)
@@ -156,21 +142,13 @@ def handle_model(state: AppState, argument: str) -> bool:
 
 
 def handle_history(state: AppState, argument: str) -> bool:
-    try:
-        _model, entries = state.client.get_history(state.session.chat_id)
-    except ChemistoError as exc:
-        print_error(str(exc))
-        return True
+    _model, entries = state.client.get_history(state.session.chat_id)
     print_history(state.session.chat_id, entries)
     return True
 
 
 def handle_stats(state: AppState, argument: str) -> bool:
-    try:
-        _model, entries = state.client.get_history(state.session.chat_id)
-    except ChemistoError as exc:
-        print_error(str(exc))
-        return True
+    _model, entries = state.client.get_history(state.session.chat_id)
     estimated = sum(estimate_tokens(e.content) for e in entries)
     print_stats(
         model=state.session.model,
@@ -182,25 +160,15 @@ def handle_stats(state: AppState, argument: str) -> bool:
 
 
 def handle_new(state: AppState, argument: str) -> bool:
-    try:
-        new_session = start_new_session(state.settings, state.client, model=state.session.model)
-    except ChemistoError as exc:
-        print_error(str(exc))
-        return True
-    state.session = new_session
+    state.session = start_new_session(state.settings, state.client, model=state.session.model)
     state.context.clear()
     state.turn_count = 0
-    state.message_count = 0
     print_success("New session created")
     return True
 
 
 def handle_clear(state: AppState, argument: str) -> bool:
-    try:
-        state.client.clear_session(state.session.chat_id)
-    except ChemistoError as exc:
-        print_error(str(exc))
-        return True
+    state.client.clear_session(state.session.chat_id)
     state.context.clear()
     print_success("Conversation and context cleared")
     return True
@@ -232,4 +200,8 @@ def dispatch(state: AppState, command: str, argument: str) -> bool:
     if handler is None:
         print_error(f"Unknown command: /{command}. Type /help to see available commands.")
         return True
-    return handler(state, argument)
+    try:
+        return handler(state, argument)
+    except ChemistoError as exc:
+        print_error(str(exc))
+        return True

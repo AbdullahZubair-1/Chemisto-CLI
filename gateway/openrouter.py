@@ -22,27 +22,42 @@ class OpenRouterError(Exception):
         self.message = message
 
 
-async def chat_completion(
-    settings: GatewaySettings,
-    model: str,
-    messages: list[dict[str, str]],
-) -> tuple[str, Usage]:
+def _require_api_key(settings: GatewaySettings) -> None:
     if not settings.openrouter_api_key:
         raise OpenRouterError(500, "OPENROUTER_API_KEY is not configured on the gateway.")
 
-    headers = {
+
+def _headers(settings: GatewaySettings) -> dict[str, str]:
+    return {
         "Authorization": f"Bearer {settings.openrouter_api_key}",
         "Content-Type": "application/json",
         "HTTP-Referer": settings.openrouter_site_url,
         "X-Title": settings.openrouter_app_name,
     }
+
+
+def _usage_from_dict(data: dict | None) -> Usage:
+    data = data or {}
+    return Usage(
+        prompt_tokens=data.get("prompt_tokens", 0),
+        completion_tokens=data.get("completion_tokens", 0),
+        total_tokens=data.get("total_tokens", 0),
+    )
+
+
+async def chat_completion(
+    settings: GatewaySettings,
+    model: str,
+    messages: list[dict[str, str]],
+) -> tuple[str, Usage]:
+    _require_api_key(settings)
     payload = {"model": model, "messages": messages}
 
     try:
         async with httpx.AsyncClient(timeout=settings.openrouter_timeout_seconds) as client:
             response = await client.post(
                 f"{settings.openrouter_base_url}/chat/completions",
-                headers=headers,
+                headers=_headers(settings),
                 json=payload,
             )
     except httpx.TimeoutException as exc:
@@ -51,8 +66,7 @@ async def chat_completion(
         raise OpenRouterError(502, f"Could not reach OpenRouter: {exc}") from exc
 
     if response.status_code >= 400:
-        detail = _extract_error_detail(response)
-        raise OpenRouterError(response.status_code, detail)
+        raise OpenRouterError(response.status_code, _extract_error_detail(response))
 
     try:
         data = response.json()
@@ -64,13 +78,7 @@ async def chat_completion(
     except (KeyError, IndexError, TypeError) as exc:
         raise OpenRouterError(502, "OpenRouter returned an unexpected response shape.") from exc
 
-    usage_data = data.get("usage") or {}
-    usage = Usage(
-        prompt_tokens=usage_data.get("prompt_tokens", 0),
-        completion_tokens=usage_data.get("completion_tokens", 0),
-        total_tokens=usage_data.get("total_tokens", 0),
-    )
-    return reply, usage
+    return reply, _usage_from_dict(data.get("usage"))
 
 
 async def stream_chat_completion(
@@ -85,15 +93,7 @@ async def stream_chat_completion(
     token usage in the last chunk when `stream_options.include_usage` is
     set). Callers distinguish the two by type.
     """
-    if not settings.openrouter_api_key:
-        raise OpenRouterError(500, "OPENROUTER_API_KEY is not configured on the gateway.")
-
-    headers = {
-        "Authorization": f"Bearer {settings.openrouter_api_key}",
-        "Content-Type": "application/json",
-        "HTTP-Referer": settings.openrouter_site_url,
-        "X-Title": settings.openrouter_app_name,
-    }
+    _require_api_key(settings)
     payload = {
         "model": model,
         "messages": messages,
@@ -106,14 +106,14 @@ async def stream_chat_completion(
             async with client.stream(
                 "POST",
                 f"{settings.openrouter_base_url}/chat/completions",
-                headers=headers,
+                headers=_headers(settings),
                 json=payload,
             ) as response:
                 if response.status_code >= 400:
                     await response.aread()
                     raise OpenRouterError(response.status_code, _extract_error_detail(response))
 
-                usage = Usage(prompt_tokens=0, completion_tokens=0, total_tokens=0)
+                usage = _usage_from_dict(None)
                 async for line in response.aiter_lines():
                     if not line or not line.startswith("data:"):
                         continue
@@ -127,18 +127,12 @@ async def stream_chat_completion(
 
                     choices = chunk.get("choices") or []
                     if choices:
-                        delta = choices[0].get("delta") or {}
-                        content = delta.get("content")
+                        content = (choices[0].get("delta") or {}).get("content")
                         if content:
                             yield content
 
-                    chunk_usage = chunk.get("usage")
-                    if chunk_usage:
-                        usage = Usage(
-                            prompt_tokens=chunk_usage.get("prompt_tokens", 0),
-                            completion_tokens=chunk_usage.get("completion_tokens", 0),
-                            total_tokens=chunk_usage.get("total_tokens", 0),
-                        )
+                    if chunk.get("usage"):
+                        usage = _usage_from_dict(chunk["usage"])
                 yield usage
     except httpx.TimeoutException as exc:
         raise OpenRouterError(504, "Timed out waiting for OpenRouter.") from exc
