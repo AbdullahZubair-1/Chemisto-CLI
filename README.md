@@ -7,7 +7,7 @@ FastAPI gateway that talks to [OpenRouter](https://openrouter.ai).
 $ chemisto
 ╭────────────────── Chemisto ───────────────────╮
 │ AI Terminal Coding Assistant                  │
-│ Model: meta-llama/llama-3.3-70b-instruct:free │
+│ Model: poolside/laguna-xs-2.1:free            │
 │ Session: 271052893c13                         │
 ╰────────────────────────────────────────────────╯
 > Explain Python decorators.
@@ -59,7 +59,7 @@ The gateway keeps chat history in memory for the MVP (see [Session management](#
  OpenRouter
    │
    ▼
- Selected LLM (Llama / Mistral / Qwen)
+ Selected LLM (Poolside / OpenAI / Gemma)
    │
    ▼
  FastAPI LLM Gateway
@@ -136,9 +136,9 @@ GATEWAY_HOST=127.0.0.1
 GATEWAY_PORT=8000
 
 # Three centrally configured models (see Model configuration below)
-CHEMISTO_MODEL_1=meta-llama/llama-3.3-70b-instruct:free
-CHEMISTO_MODEL_2=mistralai/mistral-7b-instruct:free
-CHEMISTO_MODEL_3=qwen/qwen-2.5-72b-instruct:free
+CHEMISTO_MODEL_1=poolside/laguna-xs-2.1:free
+CHEMISTO_MODEL_2=openai/gpt-oss-20b:free
+CHEMISTO_MODEL_3=google/gemma-4-31b-it:free
 
 # CLI only - no credentials
 CHEMISTO_GATEWAY_URL=http://127.0.0.1:8000
@@ -203,11 +203,11 @@ Exactly three OpenRouter **free-tier** models are configured, one central place
 (`gateway/config.py`, driven by environment variables) - no model ID is hard-coded anywhere
 else in the codebase:
 
-| Env var                  | Family  | Default model ID                          |
-|---------------------------|---------|--------------------------------------------|
-| `CHEMISTO_MODEL_1`        | Llama   | `meta-llama/llama-3.3-70b-instruct:free`   |
-| `CHEMISTO_MODEL_2`        | Mistral | `mistralai/mistral-7b-instruct:free`       |
-| `CHEMISTO_MODEL_3`        | Qwen    | `qwen/qwen-2.5-72b-instruct:free`          |
+| Env var                  | Provider | Default model ID                    |
+|---------------------------|----------|---------------------------------------|
+| `CHEMISTO_MODEL_1`        | Poolside | `poolside/laguna-xs-2.1:free`         |
+| `CHEMISTO_MODEL_2`        | OpenAI   | `openai/gpt-oss-20b:free`             |
+| `CHEMISTO_MODEL_3`        | Google   | `google/gemma-4-31b-it:free`          |
 
 > **Verify before relying on these.** OpenRouter's free-tier catalogue changes over time.
 > Check https://openrouter.ai/models (filter by "Free") for the currently available IDs and
@@ -220,12 +220,12 @@ the active model for the *current* session:
 ```
 > /model
 Available models:
-  meta-llama/llama-3.3-70b-instruct:free   Llama 3.3 70B (free)   [active]
-  mistralai/mistral-7b-instruct:free       Mistral 7B (free)
-  qwen/qwen-2.5-72b-instruct:free          Qwen 2.5 72B (free)
+  poolside/laguna-xs-2.1:free   Poolside Laguna XS 2.1 (free)   [active]
+  openai/gpt-oss-20b:free       OpenAI GPT-OSS 20B (free)
+  google/gemma-4-31b-it:free    Google Gemma 4 31B (free)
 
-> /model mistralai/mistral-7b-instruct:free
-✓ Model switched to mistralai/mistral-7b-instruct:free
+> /model openai/gpt-oss-20b:free
+✓ Model switched to openai/gpt-oss-20b:free
 ```
 
 Switching models only changes which model the *next* turn is sent to. The `chat_id`, and
@@ -239,7 +239,7 @@ On startup, Chemisto reads `~/.ats-ai/session.json`:
 ```json
 {
   "chat_id": "271052893c13",
-  "model": "meta-llama/llama-3.3-70b-instruct:free"
+  "model": "poolside/laguna-xs-2.1:free"
 }
 ```
 
@@ -389,7 +389,7 @@ network access:
 $ chemisto
 ╭────────────────── Chemisto ───────────────────╮
 │ AI Terminal Coding Assistant                  │
-│ Model: meta-llama/llama-3.3-70b-instruct:free │
+│ Model: poolside/laguna-xs-2.1:free            │
 │ Session: 271052893c13                         │
 ╰────────────────────────────────────────────────╯
 > Explain FastAPI dependency injection.
@@ -402,8 +402,8 @@ $ chemisto
 ✓ Command completed with exit code 1
 > Explain the test failure and suggest a fix.
 [AI response]
-> /model mistralai/mistral-7b-instruct:free
-✓ Model switched to mistralai/mistral-7b-instruct:free
+> /model openai/gpt-oss-20b:free
+✓ Model switched to openai/gpt-oss-20b:free
 > What did we learn from the previous test?
 [AI response using preserved conversation context]
 > /history
@@ -421,7 +421,7 @@ Goodbye!
 - Persist gateway session history to disk/a database so conversations survive a gateway
   restart (currently in-memory only, by design, for MVP simplicity).
 - Streaming responses (token-by-token) instead of waiting for the full reply.
-- A `/model` alias that accepts short names (`llama`, `mistral`, `qwen`) in addition to full
+- A `/model` alias that accepts short names (`laguna`, `gpt-oss`, `gemma`) in addition to full
   OpenRouter IDs.
 - Rate-limit and retry-with-backoff handling for OpenRouter 429s in the gateway.
 - Optional authentication between the CLI and gateway if the gateway is ever exposed beyond

@@ -46,9 +46,9 @@ class GatewaySettings:
 
 def load_settings() -> GatewaySettings:
     models = [
-        _model(1, "meta-llama/llama-3.3-70b-instruct:free", "Llama 3.3 70B (free)"),
-        _model(2, "mistralai/mistral-7b-instruct:free", "Mistral 7B (free)"),
-        _model(3, "qwen/qwen-2.5-72b-instruct:free", "Qwen 2.5 72B (free)"),
+        _model(1, "poolside/laguna-xs-2.1:free", "Poolside Laguna XS 2.1 (free)"),
+        _model(2, "openai/gpt-oss-20b:free", "OpenAI GPT-OSS 20B (free)"),
+        _model(3, "google/gemma-4-31b-it:free", "Google Gemma 4 31B (free)"),
     ]
     return GatewaySettings(
         openrouter_api_key=os.getenv("OPENROUTER_API_KEY", ""),
