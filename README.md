@@ -225,7 +225,7 @@ Available models:
   google/gemma-4-31b-it:free    Google Gemma 4 31B (free)
 
 > /model openai/gpt-oss-20b:free
-✓ Model switched to openai/gpt-oss-20b:free
+OK Model switched to openai/gpt-oss-20b:free
 ```
 
 Switching models only changes which model the *next* turn is sent to. The `chat_id`, and
@@ -268,7 +268,7 @@ so old turns cannot leak into future requests, and also clears local file/comman
 
 ```
 > /file examples/auth.py
-✓ Added file context: examples/auth.py
+OK Added file context: examples/auth.py
 > Find security problems in this file.
 ```
 
@@ -313,7 +313,7 @@ explicitly names with `/file` become context.
 
 ```
 > /run pytest examples/demo_tests/
-✓ Command completed with exit code 1
+OK Command completed with exit code 1
 > Explain why this test failed.
 ```
 
@@ -377,9 +377,9 @@ network access:
 
 | Symptom                                         | Likely cause / fix                                                             |
 |--------------------------------------------------|----------------------------------------------------------------------------------|
-| `✗ Unable to connect to the Chemisto gateway.`   | The gateway isn't running. Start it with `uvicorn gateway.main:app ...`.        |
-| `✗ ... status 401 ...` after sending a message   | `OPENROUTER_API_KEY` is missing/invalid in the gateway's `.env`.                |
-| `✗ ... status 400 ... Unknown model id`          | The model ID in `.env` no longer exists on OpenRouter - check `/models` output. |
+| `ERROR Unable to connect to the Chemisto gateway.`   | The gateway isn't running. Start it with `uvicorn gateway.main:app ...`.        |
+| `ERROR ... status 401 ...` after sending a message   | `OPENROUTER_API_KEY` is missing/invalid in the gateway's `.env`.                |
+| `ERROR ... status 400 ... Unknown model id`          | The model ID in `.env` no longer exists on OpenRouter - check `/models` output. |
 | Garbled box-drawing characters in the terminal    | Use a UTF-8 capable terminal (Windows Terminal); Chemisto forces UTF-8 output on stdout/stderr, but very old `cmd.exe` fonts may still render some glyphs oddly. |
 | `/file` says "too large"                        | Raise `CHEMISTO_MAX_FILE_SIZE_BYTES` in `.env` if you really need a bigger file. |
 
@@ -395,15 +395,15 @@ $ chemisto
 > Explain FastAPI dependency injection.
 [AI response]
 > /file examples/auth.py
-✓ Added file context: examples/auth.py
+OK Added file context: examples/auth.py
 > Explain the authentication flow and flag any security issues.
 [AI response]
 > /run pytest examples/demo_tests/
-✓ Command completed with exit code 1
+OK Command completed with exit code 1
 > Explain the test failure and suggest a fix.
 [AI response]
 > /model openai/gpt-oss-20b:free
-✓ Model switched to openai/gpt-oss-20b:free
+OK Model switched to openai/gpt-oss-20b:free
 > What did we learn from the previous test?
 [AI response using preserved conversation context]
 > /history
@@ -411,7 +411,7 @@ $ chemisto
 > /stats
 [statistics]
 > /new
-✓ New session created
+OK New session created
 > /quit
 Goodbye!
 ```

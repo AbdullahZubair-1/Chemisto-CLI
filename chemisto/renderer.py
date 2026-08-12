@@ -12,9 +12,9 @@ from contextlib import contextmanager
 from rich.console import Console
 
 # Windows terminals often default to a legacy codepage (e.g. cp1252) that
-# cannot encode the unicode symbols (checkmarks, etc.) used throughout this
-# module. Reconfigure the standard streams to UTF-8 up front so output never
-# crashes with a UnicodeEncodeError regardless of the host codepage.
+# cannot encode the box-drawing characters Rich uses for panels and tables.
+# Reconfigure the standard streams to UTF-8 up front so output never crashes
+# with a UnicodeEncodeError regardless of the host codepage.
 for _stream in (sys.stdout, sys.stderr):
     if hasattr(_stream, "reconfigure"):
         try:
@@ -48,11 +48,11 @@ def print_assistant_reply(text: str) -> None:
 
 
 def print_success(message: str) -> None:
-    console.print(f"[bold green]✓[/bold green] {message}")
+    console.print(f"[bold green]OK[/bold green] {message}")
 
 
 def print_error(message: str) -> None:
-    console.print(f"[bold red]✗[/bold red] {message}")
+    console.print(f"[bold red]ERROR[/bold red] {message}")
 
 
 def print_info(message: str) -> None:
@@ -133,6 +133,6 @@ def print_model_list(models: list[ModelInfo], current_model: str) -> None:
     table.add_column("Label")
     table.add_column("Active", justify="center")
     for model in models:
-        active = "✓" if model.id == current_model else ""
+        active = "yes" if model.id == current_model else ""
         table.add_row(model.id, model.label, active)
     console.print(table)
