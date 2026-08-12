@@ -16,6 +16,8 @@ $ chemisto
 ## Features
 
 - Natural-language questions and multi-turn conversations in a REPL.
+- Streamed, token-by-token replies rendered live as they arrive, instead of waiting for the
+  full response.
 - Read local files and add them as explicit, labeled context (`/file`).
 - Inspect directory structure (`/ls`, `/tree`).
 - Run explicitly requested shell commands and add their output as context (`/run`).
@@ -23,8 +25,10 @@ $ chemisto
   losing the conversation (`/model`).
 - View conversation history (`/history`) and session statistics (`/stats`).
 - Start a fresh session (`/new`) or clear the current one (`/clear`).
+- A built-in pacing throttle on the gateway so a burst of quick messages can't blow through
+  free-tier rate limits (see [Rate limiting](#rate-limiting)).
 - Polished [Rich](https://github.com/Textualize/rich)-powered terminal UI: panels, tables,
-  markdown rendering, syntax highlighting, spinners.
+  markdown rendering, syntax highlighting, live-updating streamed replies.
 - Clean, non-crashing handling of network and execution errors.
 
 ## Technology stack
@@ -232,6 +236,39 @@ Switching models only changes which model the *next* turn is sent to. The `chat_
 therefore the full conversation history stored by the gateway, is untouched - switching
 models never starts a new conversation.
 
+## Streaming
+
+Every reply is streamed token-by-token rather than returned all at once. The flow:
+
+```
+CLI sends POST /sessions/{chat_id}/messages/stream
+  -> gateway opens a streaming request to OpenRouter (stream: true)
+  -> gateway re-emits each token as {"type": "content", "text": "..."} (newline-delimited JSON)
+  -> CLI appends each chunk to a live-updating Rich panel as it arrives
+  -> gateway emits {"type": "done", "usage": {...}} once OpenRouter's stream ends
+  -> CLI re-renders the finished reply as formatted Markdown
+```
+
+If OpenRouter returns an error, the gateway signals it in-band as `{"type": "error", ...}`
+rather than an HTTP error status, since the HTTP response has already started streaming with
+a 200 by that point - the CLI checks the *last* event's type, not just the status code. The
+exact contract is documented in `gateway/main.py`'s module docstring.
+
+## Rate limiting
+
+Free-tier OpenRouter models enforce their own rate limits, and those limits are tied to your
+account's credit balance - a $0 balance gets the strictest limits and can be exhausted in a
+handful of quick messages, surfacing as repeated `429 Too Many Requests` errors.
+
+To avoid that, the gateway enforces a minimum spacing between every call it makes to
+OpenRouter, regardless of which session or model triggered it (`OPENROUTER_MIN_INTERVAL_SECONDS`
+in `.env`, default `3.0` seconds - see `gateway/ratelimit.py`). If you send a second message
+less than 3 seconds after the first, the gateway simply holds the request for the remaining
+time before forwarding it - you'll notice a slightly longer pause before the first token
+appears, but you won't see a 429. Lower this value if you've added credit to your OpenRouter
+account and want faster back-to-back turns; raise it if you're still seeing 429s even with the
+default.
+
 ## Session management
 
 On startup, Chemisto reads `~/.ats-ai/session.json`:
@@ -359,7 +396,7 @@ A configurable timeout (`CHEMISTO_COMMAND_TIMEOUT_SECONDS`, default 30s) and out
 python -m pytest -q
 ```
 
-45 tests across five files, all using mocks/tmp directories - none require a live gateway or
+56 tests across seven files, all using mocks/tmp directories - none require a live gateway or
 network access:
 
 - `tests/test_parser.py` - command parsing (plain messages, every command form, unknown
@@ -370,8 +407,14 @@ network access:
   prompts, language detection, command context delimiters, clearing.
 - `tests/test_commands.py` - `/run` success/failure/timeout/output-truncation, `/ls` and
   `/tree` directory handling.
-- `tests/test_gateway.py` - the HTTP client against a mocked gateway (via `respx`): success
-  responses, connection failures, timeouts, HTTP error statuses, and malformed JSON.
+- `tests/test_gateway.py` - the CLI's HTTP client against a mocked gateway (via `respx`):
+  success responses, streaming events (content/done/error), connection failures, timeouts,
+  HTTP error statuses, and malformed JSON.
+- `tests/test_openrouter_stream.py` - the gateway's SSE parsing of OpenRouter's streaming
+  responses (via `respx`): content deltas, trailing usage, and HTTP error statuses.
+- `tests/test_ratelimit.py` - the minimum-interval throttle: first call passes through
+  immediately, a second call within the interval waits out the remainder, concurrent calls
+  serialize with spacing, and a `0` interval never waits.
 
 ## Troubleshooting
 
@@ -420,9 +463,9 @@ Goodbye!
 
 - Persist gateway session history to disk/a database so conversations survive a gateway
   restart (currently in-memory only, by design, for MVP simplicity).
-- Streaming responses (token-by-token) instead of waiting for the full reply.
 - A `/model` alias that accepts short names (`laguna`, `gpt-oss`, `gemma`) in addition to full
   OpenRouter IDs.
-- Rate-limit and retry-with-backoff handling for OpenRouter 429s in the gateway.
+- Retry-with-backoff handling for the rare OpenRouter 429 that still gets through the
+  gateway's throttle (see [Rate limiting](#rate-limiting)).
 - Optional authentication between the CLI and gateway if the gateway is ever exposed beyond
   localhost.

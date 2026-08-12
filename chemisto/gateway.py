@@ -7,7 +7,9 @@ contract.
 """
 from __future__ import annotations
 
+import json
 from dataclasses import dataclass
+from typing import Iterator
 
 import httpx
 
@@ -113,6 +115,43 @@ class GatewayClient:
         data = self._request("POST", f"/sessions/{chat_id}/messages", json=payload)
         usage = Usage(**data["usage"])
         return MessageReply(chat_id=data["chat_id"], model=data["model"], reply=data["reply"], usage=usage)
+
+    def stream_message(
+        self, chat_id: str, content: str, model: str | None = None
+    ) -> Iterator[dict]:
+        """Stream a reply as newline-delimited JSON events: {"type": "content", "text": ...},
+        then a single {"type": "done", ...} or {"type": "error", ...} terminating the stream.
+        See gateway/main.py's module docstring for the exact event contract."""
+        url = f"{self._settings.gateway_url}/sessions/{chat_id}/messages/stream"
+        payload: dict = {"content": content}
+        if model:
+            payload["model"] = model
+
+        try:
+            with httpx.stream(
+                "POST", url, json=payload, timeout=self._settings.http_timeout_seconds
+            ) as response:
+                if response.status_code >= 400:
+                    response.read()
+                    raise GatewayHTTPError(response.status_code, _extract_detail(response))
+
+                for line in response.iter_lines():
+                    if not line:
+                        continue
+                    try:
+                        yield json.loads(line)
+                    except json.JSONDecodeError:
+                        continue
+        except httpx.ConnectError as exc:
+            raise GatewayConnectionError(
+                "Unable to connect to the Chemisto gateway. Is it running?"
+            ) from exc
+        except httpx.TimeoutException as exc:
+            raise GatewayTimeoutError(
+                "The Chemisto gateway did not respond in time."
+            ) from exc
+        except httpx.RequestError as exc:
+            raise GatewayConnectionError(f"Gateway request failed: {exc}") from exc
 
     def get_history(self, chat_id: str) -> tuple[str, list[HistoryEntry]]:
         data = self._request("GET", f"/sessions/{chat_id}/history")

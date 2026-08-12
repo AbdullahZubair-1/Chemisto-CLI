@@ -32,6 +32,7 @@ class GatewaySettings:
     openrouter_site_url: str
     openrouter_app_name: str
     openrouter_timeout_seconds: float
+    openrouter_min_interval_seconds: float
     host: str
     port: int
     models: list[ModelConfig] = field(default_factory=list)
@@ -56,6 +57,7 @@ def load_settings() -> GatewaySettings:
         openrouter_site_url=os.getenv("OPENROUTER_SITE_URL", "https://github.com/AbdullahZubair-1/Chemisto-CLI"),
         openrouter_app_name=os.getenv("OPENROUTER_APP_NAME", "Chemisto CLI"),
         openrouter_timeout_seconds=float(os.getenv("OPENROUTER_TIMEOUT_SECONDS", "60")),
+        openrouter_min_interval_seconds=float(os.getenv("OPENROUTER_MIN_INTERVAL_SECONDS", "3.0")),
         host=os.getenv("GATEWAY_HOST", "127.0.0.1"),
         port=int(os.getenv("GATEWAY_PORT", "8000")),
         models=models,

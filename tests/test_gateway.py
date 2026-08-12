@@ -127,3 +127,53 @@ def test_clear_session_success():
     )
     client = GatewayClient(make_settings())
     assert client.clear_session("abc") is True
+
+
+@respx.mock
+def test_stream_message_success_yields_content_then_done():
+    body = (
+        '{"type": "content", "text": "Hel"}\n'
+        '{"type": "content", "text": "lo"}\n'
+        '{"type": "done", "model": "m1", "usage": {"prompt_tokens": 1, "completion_tokens": 2, "total_tokens": 3}}\n'
+    )
+    respx.post(f"{BASE_URL}/sessions/abc/messages/stream").mock(
+        return_value=httpx.Response(200, content=body, headers={"content-type": "application/x-ndjson"})
+    )
+    client = GatewayClient(make_settings())
+    events = list(client.stream_message("abc", "hi"))
+
+    assert events[0] == {"type": "content", "text": "Hel"}
+    assert events[1] == {"type": "content", "text": "lo"}
+    assert events[2]["type"] == "done"
+    assert events[2]["usage"]["total_tokens"] == 3
+
+
+@respx.mock
+def test_stream_message_propagates_in_band_error_event():
+    body = '{"type": "error", "status_code": 429, "detail": "Too many requests"}\n'
+    respx.post(f"{BASE_URL}/sessions/abc/messages/stream").mock(
+        return_value=httpx.Response(200, content=body, headers={"content-type": "application/x-ndjson"})
+    )
+    client = GatewayClient(make_settings())
+    events = list(client.stream_message("abc", "hi"))
+
+    assert events[0] == {"type": "error", "status_code": 429, "detail": "Too many requests"}
+
+
+@respx.mock
+def test_stream_message_http_error_status_raises_gateway_http_error():
+    respx.post(f"{BASE_URL}/sessions/abc/messages/stream").mock(
+        return_value=httpx.Response(404, json={"detail": "No such session: abc"})
+    )
+    client = GatewayClient(make_settings())
+    with pytest.raises(GatewayHTTPError) as exc_info:
+        list(client.stream_message("abc", "hi"))
+    assert exc_info.value.status_code == 404
+
+
+@respx.mock
+def test_stream_message_connection_error_raises_gateway_connection_error():
+    respx.post(f"{BASE_URL}/sessions/abc/messages/stream").mock(side_effect=httpx.ConnectError("refused"))
+    client = GatewayClient(make_settings())
+    with pytest.raises(GatewayConnectionError):
+        list(client.stream_message("abc", "hi"))

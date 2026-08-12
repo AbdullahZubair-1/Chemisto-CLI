@@ -21,6 +21,7 @@ for _stream in (sys.stdout, sys.stderr):
             _stream.reconfigure(encoding="utf-8", errors="replace")
         except (ValueError, OSError):
             pass
+from rich.live import Live
 from rich.markdown import Markdown
 from rich.panel import Panel
 from rich.table import Table
@@ -45,6 +46,33 @@ def print_banner(model: str, chat_id: str) -> None:
 
 def print_assistant_reply(text: str) -> None:
     console.print(Panel(Markdown(text), title="Chemisto", border_style="green", expand=True))
+
+
+@contextmanager
+def stream_assistant_reply():
+    """Render an assistant reply live as it streams in, token by token.
+
+    Yields (append, finish): call append(chunk) for each piece of text as it
+    arrives, and finish() once the stream completes to re-render the final
+    text as Markdown (partial Markdown mid-stream renders oddly, so plain
+    text is shown while streaming and the formatted version replaces it only
+    at the end).
+    """
+    accumulated = {"text": ""}
+
+    def render() -> Panel:
+        body = Markdown(accumulated["text"]) if accumulated["text"] else Text("")
+        return Panel(body, title="Chemisto", border_style="green", expand=True)
+
+    with Live(render(), console=console, refresh_per_second=12) as live:
+        def append(chunk: str) -> None:
+            accumulated["text"] += chunk
+            live.update(Panel(Text(accumulated["text"]), title="Chemisto", border_style="green", expand=True))
+
+        def finish() -> None:
+            live.update(render())
+
+        yield append, finish
 
 
 def print_success(message: str) -> None:
