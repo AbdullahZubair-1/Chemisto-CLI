@@ -1,0 +1,135 @@
+"""HTTP client for the Chemisto FastAPI gateway.
+
+This is the only module that speaks HTTP to the gateway. It mirrors the
+exact contract defined in gateway/main.py and gateway/models.py - no
+endpoint or payload shape here is invented independently of that
+contract.
+"""
+from __future__ import annotations
+
+from dataclasses import dataclass
+
+import httpx
+
+from chemisto.config import ChemistoSettings
+from chemisto.exceptions import (
+    GatewayConnectionError,
+    GatewayHTTPError,
+    GatewayResponseError,
+    GatewayTimeoutError,
+)
+
+
+@dataclass
+class ModelInfo:
+    id: str
+    label: str
+
+
+@dataclass
+class SessionInfo:
+    chat_id: str
+    model: str
+    created_at: str
+
+
+@dataclass
+class Usage:
+    prompt_tokens: int
+    completion_tokens: int
+    total_tokens: int
+
+
+@dataclass
+class MessageReply:
+    chat_id: str
+    model: str
+    reply: str
+    usage: Usage
+
+
+@dataclass
+class HistoryEntry:
+    index: int
+    role: str
+    content: str
+
+
+class GatewayClient:
+    def __init__(self, settings: ChemistoSettings) -> None:
+        self._settings = settings
+
+    def _request(self, method: str, path: str, json: dict | None = None) -> dict:
+        url = f"{self._settings.gateway_url}{path}"
+        try:
+            response = httpx.request(
+                method, url, json=json, timeout=self._settings.http_timeout_seconds
+            )
+        except httpx.ConnectError as exc:
+            raise GatewayConnectionError(
+                "Unable to connect to the Chemisto gateway. Is it running?"
+            ) from exc
+        except httpx.TimeoutException as exc:
+            raise GatewayTimeoutError(
+                "The Chemisto gateway did not respond in time."
+            ) from exc
+        except httpx.RequestError as exc:
+            raise GatewayConnectionError(f"Gateway request failed: {exc}") from exc
+
+        if response.status_code >= 400:
+            detail = _extract_detail(response)
+            raise GatewayHTTPError(response.status_code, detail)
+
+        try:
+            return response.json()
+        except ValueError as exc:
+            raise GatewayResponseError(
+                "The gateway returned a response that could not be parsed."
+            ) from exc
+
+    def list_models(self) -> tuple[list[ModelInfo], str]:
+        data = self._request("GET", "/models")
+        models = [ModelInfo(id=m["id"], label=m["label"]) for m in data["models"]]
+        return models, data["default_model"]
+
+    def create_session(self, model: str | None = None) -> SessionInfo:
+        payload = {"model": model} if model else {}
+        data = self._request("POST", "/sessions", json=payload)
+        return SessionInfo(chat_id=data["chat_id"], model=data["model"], created_at=data["created_at"])
+
+    def get_session(self, chat_id: str) -> SessionInfo | None:
+        try:
+            data = self._request("GET", f"/sessions/{chat_id}")
+        except GatewayHTTPError as exc:
+            if exc.status_code == 404:
+                return None
+            raise
+        return SessionInfo(chat_id=data["chat_id"], model=data["model"], created_at=data["created_at"])
+
+    def send_message(self, chat_id: str, content: str, model: str | None = None) -> MessageReply:
+        payload: dict = {"content": content}
+        if model:
+            payload["model"] = model
+        data = self._request("POST", f"/sessions/{chat_id}/messages", json=payload)
+        usage = Usage(**data["usage"])
+        return MessageReply(chat_id=data["chat_id"], model=data["model"], reply=data["reply"], usage=usage)
+
+    def get_history(self, chat_id: str) -> tuple[str, list[HistoryEntry]]:
+        data = self._request("GET", f"/sessions/{chat_id}/history")
+        entries = [HistoryEntry(index=m["index"], role=m["role"], content=m["content"]) for m in data["messages"]]
+        return data["model"], entries
+
+    def clear_session(self, chat_id: str) -> bool:
+        data = self._request("DELETE", f"/sessions/{chat_id}/messages")
+        return bool(data.get("cleared", False))
+
+
+def _extract_detail(response: httpx.Response) -> str:
+    try:
+        data = response.json()
+        detail = data.get("detail")
+        if detail:
+            return str(detail)
+    except ValueError:
+        pass
+    return f"Gateway request failed with status {response.status_code}."
