@@ -81,6 +81,20 @@ async def chat_completion(
     return reply, _usage_from_dict(data.get("usage"))
 
 
+async def generate_title(settings: GatewaySettings, model: str, first_message: str) -> str:
+    """Ask the model for a short topic title for a new chat, used to name
+    its persisted JSON file (see gateway/store.py). Reuses chat_completion
+    rather than its own HTTP call - this is just a differently-prompted
+    completion, not a different API."""
+    prompt = (
+        "Summarize the following request in 3 to 6 words, suitable as a short "
+        "file name. Reply with only those words - no punctuation, no quotes, "
+        "no explanation.\n\nRequest:\n" + first_message
+    )
+    reply, _usage = await chat_completion(settings, model, [{"role": "user", "content": prompt}])
+    return reply.strip()
+
+
 async def stream_chat_completion(
     settings: GatewaySettings,
     model: str,

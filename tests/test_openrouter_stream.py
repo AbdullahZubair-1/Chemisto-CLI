@@ -1,5 +1,7 @@
 """Tests for gateway/openrouter.py's SSE parsing of OpenRouter's streaming
 chat completion responses, mocked with respx so no network call is made."""
+from pathlib import Path
+
 import httpx
 import pytest
 import respx
@@ -20,6 +22,7 @@ def make_settings() -> GatewaySettings:
         openrouter_min_interval_seconds=0.0,
         host="127.0.0.1",
         port=8000,
+        sessions_dir=Path("/tmp/chemisto-test-sessions"),
         models=[ModelConfig(id="m1", label="Model One")],
     )
 

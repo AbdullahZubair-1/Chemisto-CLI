@@ -24,6 +24,7 @@ check the last line's "type", not just the status code.
 """
 from __future__ import annotations
 
+import asyncio
 import json
 
 from fastapi import FastAPI, HTTPException
@@ -43,12 +44,36 @@ from gateway.models import (
     SessionInfoResponse,
     Usage,
 )
-from gateway.openrouter import OpenRouterError, chat_completion, stream_chat_completion
+from gateway.openrouter import OpenRouterError, chat_completion, generate_title, stream_chat_completion
 from gateway.ratelimit import MinIntervalThrottle
 from gateway.store import ChatSession, store
 
 app = FastAPI(title="Chemisto Gateway", version="0.1.0")
 throttle = MinIntervalThrottle(settings.openrouter_min_interval_seconds)
+
+# Holds references to fire-and-forget title-generation tasks so they aren't
+# garbage-collected mid-flight; each removes itself once done.
+_background_tasks: set[asyncio.Task] = set()
+
+
+def _fire_and_forget(coro) -> None:
+    task = asyncio.create_task(coro)
+    _background_tasks.add(task)
+    task.add_done_callback(_background_tasks.discard)
+
+
+async def _generate_and_store_title(chat_id: str, model: str, first_message: str) -> None:
+    """Ask the model for a short topic title and rename the chat's persisted
+    file to use it (see gateway/store.py). Runs in the background so it
+    never adds latency to the user's actual turn; failures are silently
+    ignored - the chat just keeps its "untitled-{chat_id}" file name."""
+    await throttle.wait()
+    try:
+        title = await generate_title(settings, model, first_message)
+    except OpenRouterError:
+        return
+    if title:
+        store.set_title(chat_id, title)
 
 
 @app.get("/health")
@@ -153,6 +178,10 @@ def _prepare_turn(chat_id: str, payload: SendMessageRequest) -> tuple[ChatSessio
         store.set_model(chat_id, payload.model)
 
     store.append(chat_id, "user", payload.content)
+
+    if len(session.messages) == 1 and store.mark_title_requested(chat_id):
+        _fire_and_forget(_generate_and_store_title(chat_id, session.model, payload.content))
+
     api_messages = [{"role": m.role, "content": m.content} for m in session.messages]
     return session, api_messages
 

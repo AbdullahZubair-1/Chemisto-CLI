@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import os
 from dataclasses import dataclass, field
+from pathlib import Path
 
 from dotenv import load_dotenv
 
@@ -35,6 +36,7 @@ class GatewaySettings:
     openrouter_min_interval_seconds: float
     host: str
     port: int
+    sessions_dir: Path
     models: list[ModelConfig] = field(default_factory=list)
 
     @property
@@ -60,6 +62,7 @@ def load_settings() -> GatewaySettings:
         openrouter_min_interval_seconds=float(os.getenv("OPENROUTER_MIN_INTERVAL_SECONDS", "3.0")),
         host=os.getenv("GATEWAY_HOST", "127.0.0.1"),
         port=int(os.getenv("GATEWAY_PORT", "8000")),
+        sessions_dir=Path(os.getenv("GATEWAY_SESSIONS_DIR", str(Path.home() / ".ats-ai" / "chats"))).expanduser(),
         models=models,
     )
 

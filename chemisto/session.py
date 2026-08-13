@@ -1,11 +1,12 @@
 """Local session persistence.
 
 Chemisto keeps a tiny local file (~/.ats-ai/session.json) recording only
-the active chat_id and model - never credentials. On startup this file
-is used to resume the previous conversation via the gateway; if the
-gateway no longer recognizes the chat_id (e.g. it restarted, since the
-gateway store is in-memory for this MVP) a fresh session is created
-transparently.
+the active chat_id and model - never credentials. On startup this file is
+used to resume the previous conversation via the gateway. The gateway
+itself persists full chat history to disk (see gateway/store.py) and
+reloads it on startup, so this normally succeeds even across a gateway
+restart; if the chat_id is genuinely unrecognized (e.g. its file was
+deleted), a fresh session is created transparently instead.
 """
 from __future__ import annotations
 
