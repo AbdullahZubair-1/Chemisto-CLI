@@ -343,8 +343,8 @@ Each file contains the full conversation:
 5. Stores it in memory as pending context for the *next* message.
 
 ```
-> /file examples/auth.py
-OK Added file context: examples/auth.py
+> /file src/auth.py
+OK Added file context: src/auth.py
 > Find security problems in this file.
 ```
 
@@ -352,7 +352,7 @@ What actually gets sent to the LLM:
 
 ```
 [FILE CONTEXT]
-Path: examples/auth.py
+Path: src/auth.py
 Language: python
 
 ```python
@@ -388,7 +388,7 @@ explicitly names with `/file` become context.
 `/run <command>` executes a shell command **only when the user explicitly types it**:
 
 ```
-> /run pytest examples/demo_tests/
+> /run pytest tests/
 OK Command completed with exit code 1
 > Explain why this test failed.
 ```
@@ -397,7 +397,7 @@ What gets captured and sent:
 
 ```
 [COMMAND CONTEXT]
-Command: pytest examples/demo_tests/
+Command: pytest tests/
 Exit code: 1
 
 STDOUT:
@@ -476,11 +476,11 @@ $ chemisto
 ╰────────────────────────────────────────────────╯
 > Explain FastAPI dependency injection.
 [AI response]
-> /file examples/auth.py
-OK Added file context: examples/auth.py
+> /file src/auth.py
+OK Added file context: src/auth.py
 > Explain the authentication flow and flag any security issues.
 [AI response]
-> /run pytest examples/demo_tests/
+> /run pytest tests/
 OK Command completed with exit code 1
 > Explain the test failure and suggest a fix.
 [AI response]
