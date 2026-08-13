@@ -13,6 +13,11 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
+# Project root (the folder containing gateway/, chemisto/, etc.), used to
+# anchor the default chat history location so it's visible right in the
+# project directory instead of a hidden folder in the user's home directory.
+_PROJECT_ROOT = Path(__file__).resolve().parent.parent
+
 
 @dataclass(frozen=True)
 class ModelConfig:
@@ -62,7 +67,7 @@ def load_settings() -> GatewaySettings:
         openrouter_min_interval_seconds=float(os.getenv("OPENROUTER_MIN_INTERVAL_SECONDS", "3.0")),
         host=os.getenv("GATEWAY_HOST", "127.0.0.1"),
         port=int(os.getenv("GATEWAY_PORT", "8000")),
-        sessions_dir=Path(os.getenv("GATEWAY_SESSIONS_DIR", str(Path.home() / ".ats-ai" / "chats"))).expanduser(),
+        sessions_dir=Path(os.getenv("GATEWAY_SESSIONS_DIR", str(_PROJECT_ROOT / "history"))).expanduser(),
         models=models,
     )
 
